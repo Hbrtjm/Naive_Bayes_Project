@@ -1,0 +1,12 @@
+[build-system]
+requires = []
+build-backend = []
+[project]
+name = "naive_bayes"
+version = ""
+requires-python = ">=3.12.8" 
+readme = "README.md"
+
+[project.urls]
+Homepage = "https://github.com/Hbrtjm/Naive_Bayes_Project"
+Issues = "https://github.com/Hbrtjm/Naive_Bayes_Project/issues"
