@@ -4,8 +4,9 @@ from typing import Self, List
 from os import path
 from sys import stderr
 from sklearn.model_selection import train_test_split
+from math import log
 
-class NaiveBayes:
+class MultinomialNaiveBayesClassifier:
 
     def __init__(self: Self) -> None:
         """
@@ -13,6 +14,7 @@ class NaiveBayes:
         """
         self.testTrainSplit = 0.2
         self.dataSize = None
+        self.df = None
         self.classes = set()
         self.traits = {}
         self.traitNames = []
@@ -25,6 +27,7 @@ class NaiveBayes:
         self.alpha = 1
         self.current_dir = path.dirname(__file__)
         self.dataPath = self.current_dir
+        self.oddities = 0
     
     def set_data_source(self: Self,filename: str,separator: str = ',') -> None:
         """
@@ -36,7 +39,7 @@ class NaiveBayes:
         Nothing
         """
         # Relative path to the data file, should be changed later so that it works in general
-        self.relativePath = path.join('../', 'data',filename)
+        self.relativePath = path.join('../../', 'data',filename)
         # Absolute (!) path to the data file
         self.dataPath = path.abspath(self.relativePath)
         self.separator = separator
@@ -138,9 +141,21 @@ class NaiveBayes:
                 for key,value in self.traitsConditionalCount[className][column].items():
                     if column not in self.traitsConditionalLikelyhood[className]:
                         self.traitsConditionalLikelyhood[className][column] = {}
-                    self.traitsConditionalLikelyhood[className][column][key] = value/(self.classesCount[className]+self.alpha*len(self.traitsConditionalLikelyhood[className][column]))
+                    # self.traitsConditionalLikelyhood[className][column][key] = value/(self.classesCount[className]+self.alpha*len(self.traitsConditionalLikelyhood[className][column]))
+                    self.traitsConditionalLikelyhood[className][column][key] = value/(self.dataSize+self.alpha*len(self.traitsConditionalLikelyhood[className][column]))
 
-    def fit(self: Self) -> bool:
+    def read_data(self: Self) -> None:
+        if not self.dataPath:
+            print("First set the data source!")
+            return False
+        try:
+            dataframe = pd.read_csv(self.dataPath)
+        except Exception as error:
+            print("An error has occured while reading the file (check if the file exists)", file=stderr)
+            raise error
+        self.df = dataframe
+    
+    def fit(self: Self) -> None:
         """
         Trains the model based on the given data
         Arguments:
@@ -150,20 +165,13 @@ class NaiveBayes:
         False - if the training set is not configured properly
         Raises Error - if an error occured while reading the data
         """
-        # =============== Read data ===============
         
-        # Read file
-        if not self.dataPath:
-            print("First set the data source!")
-            return False
-        try:
-            df = pd.read_csv(self.dataPath)
-        except Exception as error:
-            print("An error has occured while reading the file (check if the file exists)", file=stderr)
-            raise error
-        trainSet, testSet = train_test_split(df, test_size=self.testTrainSplit)
+        # =============== Read data, set train and test sets ===============
+        
+        self.read_data()
+        trainSet, testSet = train_test_split(self.df, test_size=self.testTrainSplit)
         self.add_trait_names(trainSet)
-        self.add_traits(df)
+        self.add_traits(self.df)
         self.dataSize = trainSet.size//len(trainSet.columns)
         # Set the class column name (usually 'class')
         classColumnName = trainSet.columns[0]
@@ -177,11 +185,13 @@ class NaiveBayes:
         self.add_alpha_to_conditional_traits()
 
         # =============== Calculate likelyhoods ===============
+        
         self.calculate_trait_likelyhoods(trainSet)
         self.calculate_classes_likelyhoods()
         self.calculate_conditional_likelyhoods(trainSet)
 
         # =============== Test after training ===============
+        
         print("Testing after training")
         correctGuesses = 0
         adjustmentGuesses = 0
@@ -213,7 +223,7 @@ class NaiveBayes:
         return predictions
 
     def select_most_likely(self: Self, predictedProbabilities: dict[str,float]) -> tuple[str,float]:
-        maxProb = 0
+        maxProb = -float('inf')
         maxClass = None
         for key in predictedProbabilities.keys():
             value =  predictedProbabilities[key] 
@@ -244,12 +254,37 @@ class NaiveBayes:
          - A list of probabilities of classification
         """
         classProbabilities = {}
+        classScores = {}
+        classPartialProbabilities = { element:[] for element in self.classes }
         for className in self.classes:
             resultProbability = 0
             accumulatedTraits = 1
+            summedClassScore = 0
             for i,trait in enumerate(dataRow):
                 # One-liner to be split up
-                accumulatedTraits *= self.traitsConditionalLikelyhood[className][self.traitNames[i]][trait]/self.traitsLikelyhood[self.traitNames[i]][trait]
-            resultProbability = accumulatedTraits*self.classesLikelyhood[className]
+                
+                conditionalLikelyhood = self.traitsConditionalLikelyhood[className][self.traitNames[i]][trait] 
+                traitsLikelyhood = self.traitsLikelyhood[self.traitNames[i]][trait]
+                accumulatedTraits *= conditionalLikelyhood
+                classPartialProbabilities[className].append(f"{self.traitsConditionalLikelyhood[className][self.traitNames[i]][trait]} / {self.traitsLikelyhood[self.traitNames[i]][trait]}")
+                
+                logarithmicConditionalScore = log(conditionalLikelyhood)
+                logarithmicTraitsScore = log(traitsLikelyhood)
+                summedClassScore += logarithmicConditionalScore - logarithmicTraitsScore
+            classLikelyhood = self.classesLikelyhood[className]
+            logClassScore = log(classLikelyhood)
+            resultProbability = accumulatedTraits*classLikelyhood
+            summedClassScore += logClassScore
             classProbabilities[className] = resultProbability
-        return classProbabilities
+            classScores[className] = summedClassScore # Will be negative
+        printClass = False
+        for key in classProbabilities.keys():
+            if classProbabilities[key] > 1:
+                self.oddities += 1
+                # print(f"Weird probability... To be verified")
+                # print(classProbabilities)
+                # printClass = True
+        if printClass:
+            for key in classProbabilities.keys():
+                print(f"{key}: {classPartialProbabilities[key]}")
+        return classScores
