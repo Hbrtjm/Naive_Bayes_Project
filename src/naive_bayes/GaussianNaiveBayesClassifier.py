@@ -6,25 +6,25 @@ from sys import stderr
 from sklearn.model_selection import train_test_split
 from math import log, pi, exp, sqrt
 
-# TODO - Make descriptions, add artificial alphas
+# TODO - Make descriptions 
 
 class NormalDistribution:
-    def __init__(self: Self, mean: float = None, deviation: float = None):
+    def __init__(self: Self, mean: float = None, variance: float = None):
         self.mean = mean
-        self.deviation = deviation
+        self.variance = variance
     
     def get_value(self: Self, x: float):
-        if self.mean is None or self.deviation is None:
+        if self.mean is None or self.variance is None:
             raise ValueError("Values not set for Gaussian distribution") 
-        return exp(-(x-self.mean)**2/(2*self.deviation**2))*(1/sqrt(2*pi*self.deviation**2))
+        return exp(-(x-self.mean)**2/(2*self.variance))*(1/sqrt(2*pi*self.variance))
 
     def fit_values(self: Self, values: List[float]):
         self.mean = sum(values)/len(values)
         squaredMean = sum([ element ** 2 for element in values ])/len(values)
-        self.deviation = squaredMean - self.mean ** 2
+        self.variance = squaredMean - self.mean ** 2
 
     def __str__(self: Self):
-        return f"Mean of Gaussian: {self.mean} Deviation of Gaussian: {self.deviation}"
+        return f"Mean of Gaussian: {self.mean}\nVariance of Gaussian: {self.variance}\n"
 
     def __repr__(self: Self):
         return str(self)
@@ -34,6 +34,7 @@ class GaussianNaiveBayesClassifier:
         """
         Constructor of the Naive Bayes class
         """
+        self.testData = None
         self.dict = {}
         self.classesLikelyhood = {}
         self.classesCount = {}
@@ -48,6 +49,10 @@ class GaussianNaiveBayesClassifier:
         self.current_dir = path.dirname(__file__)
         self.dataPath = self.current_dir
         self.oddities = 0
+
+    def set_split_ratio(self: Self, ratio: float):
+        self.testTrainSplit = ratio
+        
 
     def set_data_source(self: Self,filename: str,separator: str = ',') -> None:
         """
@@ -130,8 +135,32 @@ class GaussianNaiveBayesClassifier:
                 gaussian = NormalDistribution()
                 gaussian.fit_values(array)
                 self.conditionalProbabilities[className][trait] = gaussian
-                print(self.conditionalProbabilities[className][trait])
+                # print(self.conditionalProbabilities[className][trait])
+    def test(self: Self) -> float:
+        """
+        Returns accuracy of the test
+        """
+        correctGuesses = 0
+        adjustmentGuesses = 0
+        for rowIndex, test in self.testData.iterrows():
+            # print(test)
+            className, likelyhoodValue = self.predict(test[:len(test)-1])
+            if className == test[len(test)-1]:
+                correctGuesses += 1
+                adjustmentGuesses += 1 # Didn't need adjustment
+            else:
+                predictions = self.predict_proba(test[:len(test)-1])
+                # print(f"Wrong predictions {predictions} expected {test[len(test)-1]} but gotten {className}")
+                # print(test)
+                # newPredictions = self.make_mushroom_safe(predictions)
+                # newClassName, _ = self.select_most_likely(newPredictions)
+                # if newClassName == test[0]:
+                #     adjustmentGuesses += 1
+        accuracy = correctGuesses/len(self.testData)
+        adjustmentAccuracy = adjustmentGuesses/len(self.testData)
+        # print(f"Accuracy of {accuracy} accuracy after safety adjsutment {adjustmentAccuracy}") 
 
+        
     def fit(self: Self):
         """
         Trains the model based on the given data
@@ -144,38 +173,15 @@ class GaussianNaiveBayesClassifier:
         """
         
         self.read_data()
-        trainSet , testSet = train_test_split(self.df, test_size=self.testTrainSplit)
+        trainSet, self.testData = train_test_split(self.df, test_size=self.testTrainSplit)
         self.dataSize = trainSet.size//len(trainSet.columns)
 
         self.add_traits(trainSet)
         self.create_sets(trainSet)
-        print(self.conditionalTraitsList)
+        # print(self.conditionalTraitsList)
         self.calculate_gaussians()
         self.calculate_classes_likelyhoods()
-        # =============== Test after training ===============
-        
-        print("Testing after training")
-        correctGuesses = 0
-        adjustmentGuesses = 0
-        for rowIndex, test in testSet.iterrows():
-            # print(test)
-            className, likelyhoodValue = self.predict(test[:len(test)-1])
-            if className == test[len(test)-1]:
-                correctGuesses += 1
-                adjustmentGuesses += 1 # Didn't need adjustment
-            else:
-                predictions = self.predict_proba(test[1:])
-                print(f"Wrong predictions {predictions} expected {test[len(test)-1]} but gotten {className}")
-                print(test)
-                # newPredictions = self.make_mushroom_safe(predictions)
-                # newClassName, _ = self.select_most_likely(newPredictions)
-                # if newClassName == test[0]:
-                #     adjustmentGuesses += 1
-        accuracy = correctGuesses/len(testSet)
-        adjustmentAccuracy = adjustmentGuesses/len(testSet)
-        print(f"Accuracy of {accuracy} accuracy after safety adjsutment {adjustmentAccuracy}") 
 
-        
     def select_most_likely(self: Self, predictedProbabilities: dict[str,float]) -> tuple[str,float]:
         maxScore = -float('inf')
         maxClass = None
@@ -219,6 +225,7 @@ class GaussianNaiveBayesClassifier:
                 if not conditionalLikelyhood <= 0:
                     logarithmicConditionalScore = log(conditionalLikelyhood)
                 else:
+                    # print(f"Produced 0 or negative because\nThis is the conditional likelyhood {conditionalLikelyhood}\nThis is the Distribution that used it {self.conditionalProbabilities[className][self.traitNames[i]]}")
                     logarithmicConditionalScore = -float('inf')
                 summedClassScore += logarithmicConditionalScore
             classLikelyhood = self.classesLikelyhood[className]
@@ -239,7 +246,7 @@ class GaussianNaiveBayesClassifier:
                 # print(f"Weird probability... To be verified")
                 # print(classProbabilities)
                 # printClass = True
-        if printClass:
-            for key in classProbabilities.keys():
-                print(f"{key}: {classPartialProbabilities[key]}")
+        # if printClass:
+        #     for key in classProbabilities.keys():
+        #         print(f"{key}: {classPartialProbabilities[key]}")
         return classScores

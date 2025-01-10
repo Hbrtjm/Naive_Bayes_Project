@@ -28,7 +28,10 @@ class MultinomialNaiveBayesClassifier:
         self.current_dir = path.dirname(__file__)
         self.dataPath = self.current_dir
         self.oddities = 0
-    
+
+    def set_split_ratio(self: Self, ratio: float):
+        self.testTrainSplit = ratio
+        
     def set_data_source(self: Self,filename: str,separator: str = ',') -> None:
         """
         Sets the data source for the model to train on
@@ -130,7 +133,7 @@ class MultinomialNaiveBayesClassifier:
         """
         for key,value in self.classesCount.items():
             self.classesLikelyhood[key] = value/self.dataSize
-            print(f"{value} / {self.dataSize}")
+            # print(f"{value} / {self.dataSize}")
 
     def calculate_conditional_likelyhoods(self: Self, df: pd.DataFrame) -> None:
         for className in self.classes:
@@ -154,7 +157,28 @@ class MultinomialNaiveBayesClassifier:
             print("An error has occured while reading the file (check if the file exists)", file=stderr)
             raise error
         self.df = dataframe
-    
+            
+    def test(self: Self):
+        print("Testing after training")
+        correctGuesses = 0
+        adjustmentGuesses = 0
+        for rowIndex, test in self.testData.iterrows():
+            # print(test)
+            className, likelyhoodValue = self.predict(test[1:])
+            if className == test[0]:
+                correctGuesses += 1
+                adjustmentGuesses += 1 # Didn't need adjustment
+            else:
+                predictions = self.predict_proba(test[1:])
+                # print(f"Wrong predictions {predictions} expected {test[0]} but gotten {className}")
+                newPredictions = self.make_mushroom_safe(predictions)
+                newClassName, _ = self.select_most_likely(newPredictions)
+                if newClassName == test[0]:
+                    adjustmentGuesses += 1
+        accuracy = correctGuesses/len(self.testData)
+        adjustmentAccuracy = adjustmentGuesses/len(self.testData)
+        # print(f"Accuracy of {accuracy} accuracy after safety adjsutment {adjustmentAccuracy}") 
+        return accuracy
     def fit(self: Self) -> None:
         """
         Trains the model based on the given data
@@ -169,7 +193,7 @@ class MultinomialNaiveBayesClassifier:
         # =============== Read data, set train and test sets ===============
         
         self.read_data()
-        trainSet, testSet = train_test_split(self.df, test_size=self.testTrainSplit)
+        trainSet, self.testData = train_test_split(self.df, test_size=self.testTrainSplit)
         self.add_trait_names(trainSet)
         self.add_traits(self.df)
         self.dataSize = trainSet.size//len(trainSet.columns)
@@ -189,31 +213,6 @@ class MultinomialNaiveBayesClassifier:
         self.calculate_trait_likelyhoods(trainSet)
         self.calculate_classes_likelyhoods()
         self.calculate_conditional_likelyhoods(trainSet)
-
-        # =============== Test after training ===============
-        
-        print("Testing after training")
-        correctGuesses = 0
-        adjustmentGuesses = 0
-        for rowIndex, test in testSet.iterrows():
-            # print(test)
-            className, likelyhoodValue = self.predict(test[1:])
-            if className == test[0]:
-                correctGuesses += 1
-                adjustmentGuesses += 1 # Didn't need adjustment
-            else:
-                predictions = self.predict_proba(test[1:])
-                # print(f"Wrong predictions {predictions} expected {test[0]} but gotten {className}")
-                newPredictions = self.make_mushroom_safe(predictions)
-                newClassName, _ = self.select_most_likely(newPredictions)
-                if newClassName == test[0]:
-                    adjustmentGuesses += 1
-        accuracy = correctGuesses/len(testSet)
-        adjustmentAccuracy = adjustmentGuesses/len(testSet)
-        print(f"Accuracy of {accuracy} accuracy after safety adjsutment {adjustmentAccuracy}") 
-
-        # The model has been fit successfully
-        return True
     
     def make_mushroom_safe(self: Self, predictions: dict[str,float]):
         # ONLY FOR MUSHROOM PREDICTOR
@@ -284,7 +283,7 @@ class MultinomialNaiveBayesClassifier:
                 # print(f"Weird probability... To be verified")
                 # print(classProbabilities)
                 # printClass = True
-        if printClass:
-            for key in classProbabilities.keys():
-                print(f"{key}: {classPartialProbabilities[key]}")
+        # if printClass:
+        #     for key in classProbabilities.keys():
+        #         print(f"{key}: {classPartialProbabilities[key]}")
         return classScores
