@@ -4,7 +4,8 @@ from typing import Self, List
 from os import path
 from sys import stderr
 from sklearn.model_selection import train_test_split
-from math import log, pi, exp, sqrt
+from math import log, pi, sqrt
+from numpy import exp
 
 # TODO - Make descriptions 
 
@@ -16,6 +17,8 @@ class NormalDistribution:
     def get_value(self: Self, x: float):
         if self.mean is None or self.variance is None:
             raise ValueError("Values not set for Gaussian distribution") 
+        if self.variance == 0:
+            return 0
         return exp(-(x-self.mean)**2/(2*self.variance))*(1/sqrt(2*pi*self.variance))
 
     def fit_values(self: Self, values: List[float]):
@@ -159,7 +162,7 @@ class GaussianNaiveBayesClassifier:
         accuracy = correctGuesses/len(self.testData)
         adjustmentAccuracy = adjustmentGuesses/len(self.testData)
         # print(f"Accuracy of {accuracy} accuracy after safety adjsutment {adjustmentAccuracy}") 
-
+        return accuracy
         
     def fit(self: Self):
         """

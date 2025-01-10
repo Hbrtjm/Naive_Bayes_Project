@@ -10,7 +10,8 @@ def run_tests(GivenClass,testSetName,modelName):
     steps = int(1/step)
     testCases = [ i*step for i in range(1,steps) ]
     trials = 6
-    print("Testing Gaussian Naive Bayes Classifier")
+
+    print(f"Testing {modelName}")
     for ratio in testCases:
         accuracies = []
         for _ in range(trials):
@@ -19,13 +20,16 @@ def run_tests(GivenClass,testSetName,modelName):
             nb.set_split_ratio(ratio)
             nb.fit()
             accuracies.append(nb.test())
-        print(f"For test/train split ratio {ratio}:\n\tAverage accuracy:\t{mean(accuracies)}\n\tMax accuracy:\t\t{max(accuracies)}\n\tMin accuracy: \t\t{min(accuracies)}\n")
-        with open('benchmark.txt','+a') as dataFile:
-            dataFile.write(f"For test/train split ratio {ratio}:\n\tAverage accuracy:\t{mean(accuracies)}\n\tMax accuracy:\t\t{max(accuracies)}\n\tMin accuracy: \t\t{min(accuracies)}\n")
-    print("Testing Multinomial Naive Bayes Classifier")
+        if len(accuracies) and ratio:
+            print(f"For test/train split ratio {ratio}:\n\tAverage accuracy:\t{mean(accuracies)}\n\tMax accuracy:\t\t{max(accuracies)}\n\tMin accuracy: \t\t{min(accuracies)}\n")
+            with open(f'benchmark_{modelName}.txt','+a') as dataFile:
+                dataFile.write(f"For test/train split ratio {ratio}:\n\tAverage accuracy:\t{mean(accuracies)}\n\tMax accuracy:\t\t{max(accuracies)}\n\tMin accuracy: \t\t{min(accuracies)}\n")
 
 def main():
-    testClasses = [(MultinomialNaiveBayesClassifier,"mushrooms.csv","MNBC"),(GaussianNaiveBayesClassifier,"iris.csv","GNBC")]
+    testClasses = [
+        (MultinomialNaiveBayesClassifier,"mushrooms.csv","MNBC"),
+        (GaussianNaiveBayesClassifier,"iris.csv","GNBC")
+        ]
 
     for testClass, setName, model in testClasses:
         run_tests(testClass,setName,model) 
