@@ -1,0 +1,36 @@
+For test/train split ratio 0.1:
+	Average accuracy:	0.9440344403444034
+	Max accuracy:		0.959409594095941
+	Min accuracy: 		0.9261992619926199
+For test/train split ratio 0.2:
+	Average accuracy:	0.9416410256410257
+	Max accuracy:		0.9489230769230769
+	Min accuracy: 		0.9366153846153846
+For test/train split ratio 0.30000000000000004:
+	Average accuracy:	0.9358764014219305
+	Max accuracy:		0.9417555373256767
+	Min accuracy: 		0.9253486464315013
+For test/train split ratio 0.4:
+	Average accuracy:	0.9443076923076923
+	Max accuracy:		0.9553846153846154
+	Min accuracy: 		0.9384615384615385
+For test/train split ratio 0.5:
+	Average accuracy:	0.9416543574593796
+	Max accuracy:		0.947808961102905
+	Min accuracy: 		0.9345150172328902
+For test/train split ratio 0.6000000000000001:
+	Average accuracy:	0.9366153846153846
+	Max accuracy:		0.9435897435897436
+	Min accuracy: 		0.9312820512820513
+For test/train split ratio 0.7000000000000001:
+	Average accuracy:	0.9356133872574879
+	Max accuracy:		0.9460172322841568
+	Min accuracy: 		0.9256198347107438
+For test/train split ratio 0.8:
+	Average accuracy:	0.9354615384615385
+	Max accuracy:		0.9472307692307692
+	Min accuracy: 		0.9203076923076923
+For test/train split ratio 0.9:
+	Average accuracy:	0.9281318380743983
+	Max accuracy:		0.9350382932166302
+	Min accuracy: 		0.9183533916849015

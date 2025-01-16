@@ -19,7 +19,7 @@ def run_tests(GivenClass,testSetName,modelName):
             nb.set_data_source(testSetName)
             nb.set_split_ratio(ratio)
             nb.fit()
-            accuracies.append(nb.test())
+            accuracies.append(nb.test_local())
         if len(accuracies) and ratio:
             print(f"For test/train split ratio {ratio}:\n\tAverage accuracy:\t{mean(accuracies)}\n\tMax accuracy:\t\t{max(accuracies)}\n\tMin accuracy: \t\t{min(accuracies)}\n")
             with open(f'benchmark_{modelName}.txt','+a') as dataFile:

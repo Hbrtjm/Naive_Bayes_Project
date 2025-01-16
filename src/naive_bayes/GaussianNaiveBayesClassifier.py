@@ -19,8 +19,11 @@ class NormalDistribution:
             raise ValueError("Values not set for Gaussian distribution") 
         if self.variance == 0:
             return 0
-        return exp(-(x-self.mean)**2/(2*self.variance))*(1/sqrt(2*pi*self.variance))
-
+        try:
+            return exp(-(x-self.mean)**2/(2*self.variance))*(1/sqrt(2*pi*self.variance))
+        except Exception as e:
+            print(e)
+            return 0
     def fit_values(self: Self, values: List[float]):
         self.mean = sum(values)/len(values)
         squaredMean = sum([ element ** 2 for element in values ])/len(values)
@@ -37,7 +40,7 @@ class GaussianNaiveBayesClassifier:
         """
         Constructor of the Naive Bayes class
         """
-        self.testData = None
+        self.testSet = None
         self.dict = {}
         self.classesLikelyhood = {}
         self.classesCount = {}
@@ -92,8 +95,8 @@ class GaussianNaiveBayesClassifier:
         """
         print(self.df)
 
-    def add_traits(self: Self, df: pd.DataFrame):
-        for traitName in df.columns:
+    def add_traits(self: Self):
+        for traitName in self.trainSet.columns:
             self.traitNames.append(traitName)
 
     def add_class(self: Self, value: str):
@@ -114,18 +117,16 @@ class GaussianNaiveBayesClassifier:
         """
         Calculates likelyhoods of each class of all classes
         """
-        # print(self.classesCount)
         for key,value in self.classesCount.items():
             self.classesLikelyhood[key] = value/self.dataSize
-            # print(f"{value} / {self.dataSize}")
 
-    def create_sets(self: Self, df: pd.DataFrame):        
-        for index, row in df.iterrows():
-            className = row[df.columns[len(df.columns)-1]]
+    def create_sets(self: Self):        
+        for index, row in self.trainSet.iterrows():
+            className = row[self.trainSet.columns[len(self.trainSet.columns)-1]]
             self.add_class_value(className)
             if className not in self.conditionalTraitsList:
                 self.conditionalTraitsList[className] = {}
-            for column in df.columns[:len(df.columns)-1]:
+            for column in self.trainSet.columns[:len(self.trainSet.columns)-1]:
                 if column not in self.conditionalTraitsList[className]:
                     self.conditionalTraitsList[className][column] = []
                 self.conditionalTraitsList[className][column].append(row[column])
@@ -138,33 +139,41 @@ class GaussianNaiveBayesClassifier:
                 gaussian = NormalDistribution()
                 gaussian.fit_values(array)
                 self.conditionalProbabilities[className][trait] = gaussian
-                # print(self.conditionalProbabilities[className][trait])
-    def test(self: Self) -> float:
+    
+    def test_accuracy(self: Self, testSet: pd.DataFrame):
+        self.testSet = testSet
+        return self.test_local()
+    
+    def test_local(self: Self) -> float:
         """
         Returns accuracy of the test
         """
         correctGuesses = 0
         adjustmentGuesses = 0
-        for rowIndex, test in self.testData.iterrows():
-            # print(test)
+        for rowIndex, test in self.testSet.iterrows():
             className, likelyhoodValue = self.predict(test[:len(test)-1])
             if className == test[len(test)-1]:
                 correctGuesses += 1
                 adjustmentGuesses += 1 # Didn't need adjustment
             else:
                 predictions = self.predict_proba(test[:len(test)-1])
-                # print(f"Wrong predictions {predictions} expected {test[len(test)-1]} but gotten {className}")
-                # print(test)
-                # newPredictions = self.make_mushroom_safe(predictions)
-                # newClassName, _ = self.select_most_likely(newPredictions)
-                # if newClassName == test[0]:
-                #     adjustmentGuesses += 1
-        accuracy = correctGuesses/len(self.testData)
-        adjustmentAccuracy = adjustmentGuesses/len(self.testData)
-        # print(f"Accuracy of {accuracy} accuracy after safety adjsutment {adjustmentAccuracy}") 
+        accuracy = correctGuesses/len(self.testSet)
+        adjustmentAccuracy = adjustmentGuesses/len(self.testSet)
         return accuracy
-        
-    def fit(self: Self):
+    
+    def fit_test(self: Self):
+        self.read_data()
+        self.trainSet, self.testSet
+
+    def fit(self: Self,trainSet):
+        self.trainSet = trainSet
+        self.fit_local()
+
+    def set_train_set(self: Self):
+        self.read_data()
+        self.trainSet, self.testSet = train_test_split(self.df, test_size=self.testTrainSplit)
+
+    def fit_local(self: Self):
         """
         Trains the model based on the given data
         Arguments:
@@ -174,14 +183,10 @@ class GaussianNaiveBayesClassifier:
         False - if the training set is not configured properly
         Raises Error - if an error occured while reading the data
         """
-        
-        self.read_data()
-        trainSet, self.testData = train_test_split(self.df, test_size=self.testTrainSplit)
-        self.dataSize = trainSet.size//len(trainSet.columns)
+        self.dataSize = self.trainSet.size//len(self.trainSet.columns)
 
-        self.add_traits(trainSet)
-        self.create_sets(trainSet)
-        # print(self.conditionalTraitsList)
+        self.add_traits()
+        self.create_sets()
         self.calculate_gaussians()
         self.calculate_classes_likelyhoods()
 
@@ -207,7 +212,7 @@ class GaussianNaiveBayesClassifier:
         predictedProbabilities = self.predict_proba(dataRow)
         return self.select_most_likely(predictedProbabilities)
   
-    def predict_proba(self: Self,dataRow: tuple[float]) -> dict[str,float]:
+    def predict_proba(self: Self, dataRow: tuple[float]) -> dict[str,float]:
         """
         Predicts which value is most likely to appear
         Arguments:
@@ -222,14 +227,13 @@ class GaussianNaiveBayesClassifier:
             resultProbability = 0
             accumulatedTraits = 1
             summedClassScore = 0
-            for i,traitValue in enumerate(dataRow[:len(dataRow)-1]):                
+            for i,traitValue in enumerate(dataRow[:len(dataRow)-1]):
                 conditionalLikelyhood = self.conditionalProbabilities[className][self.traitNames[i]].get_value(traitValue) 
                 accumulatedTraits *= conditionalLikelyhood
                 if not conditionalLikelyhood <= 0:
                     logarithmicConditionalScore = log(conditionalLikelyhood)
                 else:
-                    # print(f"Produced 0 or negative because\nThis is the conditional likelyhood {conditionalLikelyhood}\nThis is the Distribution that used it {self.conditionalProbabilities[className][self.traitNames[i]]}")
-                    logarithmicConditionalScore = -float('inf')
+                    logarithmicConditionalScore = 0
                 summedClassScore += logarithmicConditionalScore
             classLikelyhood = self.classesLikelyhood[className]
             # Should not be the case, but it could happen that the new class appears
@@ -241,15 +245,8 @@ class GaussianNaiveBayesClassifier:
             summedClassScore += logClassScore
             classProbabilities[className] = resultProbability
             classScores[className] = summedClassScore # Will be negative
-            # print(classScores[className])
         printClass = False
         for key in classProbabilities.keys():
             if classProbabilities[key] > 1:
                 self.oddities += 1
-                # print(f"Weird probability... To be verified")
-                # print(classProbabilities)
-                # printClass = True
-        # if printClass:
-        #     for key in classProbabilities.keys():
-        #         print(f"{key}: {classPartialProbabilities[key]}")
         return classScores

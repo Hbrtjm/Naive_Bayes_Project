@@ -1,5 +1,4 @@
 import pandas as pd
-# import numpy as np
 from typing import Self, List
 from os import path
 from sys import stderr
@@ -12,34 +11,55 @@ class MultinomialNaiveBayesClassifier:
         """
         Constructor of the Naive Bayes class
         """
-        self.testTrainSplit = 0.2
+        # Train-test split ratio, in case the data is read from the model
+        self.testTrainSplit = 0.7
+        # Total number of data points
         self.dataSize = None
+        # DataFrame containing the dataset
         self.df = None
+        # Unique classes in the dataset
         self.classes = set()
+        # Traits to exclude from analysis, should be by the index
+        self.excludedTraits = set()
+        # Dictionary of traits and their possible values
         self.traits = {}
+        # Names of all traits
         self.traitNames = []
+        # Conditional probabilities of traits given classes
         self.traitsConditionalLikelyhood = {}
+        # Count of each trait's occurrences
         self.traitsCount = {}
+        # Likelihood of each trait value
         self.traitsLikelyhood = {}
+        # Conditional count of traits per class
         self.traitsConditionalCount = {}
+        # Count of each class
         self.classesCount = {}
+        # Likelihood of each class
         self.classesLikelyhood = {}
+        # Smoothing factor for Naive Bayes
         self.alpha = 1
+        # Current directory path
         self.current_dir = path.dirname(__file__)
+        # Path to the dataset
         self.dataPath = self.current_dir
+        # Counter for unusual probabilities
         self.oddities = 0
 
-    def set_split_ratio(self: Self, ratio: float):
+    def set_split_ratio(self: Self, ratio: float):          
+        """
+        Sets the ratio for splitting the dataset into training and testing sets.
+        """
         self.testTrainSplit = ratio
         
     def set_data_source(self: Self,filename: str,separator: str = ',') -> None:
+
         """
-        Sets the data source for the model to train on
+        Sets the data source for the model to train on.
+        
         Arguments:
-        filename: Name of the file with the extension
-        separator: Defines a data separator in the file 
-        Returns:
-        Nothing
+        - filename: Name of the file with the extension
+        - separator: Defines the delimiter used in the file
         """
         # Relative path to the data file, should be changed later so that it works in general
         self.relativePath = path.join('../../', 'data',filename)
@@ -47,18 +67,21 @@ class MultinomialNaiveBayesClassifier:
         self.dataPath = path.abspath(self.relativePath)
         self.separator = separator
     
-    def add_trait_names(self: Self, df: pd.DataFrame):
-        for column in df.columns[1:]:
+    def add_trait_names(self: Self):
+        """
+        Initializes the traits dictionary with column names (except the class column).
+        """
+        for column in self.trainSet[1:]:
             self.traits[column] = set()
 
-    def add_traits(self: Self, df: pd.DataFrame):
+    def add_traits(self: Self):
         """
         Updates the traits dictionary with all of the available traits, especially for the missing traits
         """
-        for traitName in df.columns[1:]:
+        for traitName in self.trainSet.columns[1:]:
             self.traitNames.append(traitName)
-        for index, row in df.iterrows():
-            for traitName in df.columns[1:]:
+        for index, row in self.trainSet.iterrows():
+            for traitName in self.trainSet.columns[1:]:
                 self.traits[traitName].add(row[traitName])
 
     def add_class_value(self: Self, value: str) -> None:
@@ -72,12 +95,12 @@ class MultinomialNaiveBayesClassifier:
         else:
             self.classesCount[value] += 1
 
-    def add_trait_values(self: Self, df: pd.DataFrame, row) -> None:
+    def add_trait_values(self: Self, row) -> None:
         """
         For each trait function counts the occurence of its values in the dataset
         """
         # Skip the class column
-        for column in df.columns[1:]:
+        for column in self.trainSet.columns[1:]:
             if column not in self.traitsCount:
                 self.traitsCount[column] = { row[column]:1 }
                 continue
@@ -86,13 +109,16 @@ class MultinomialNaiveBayesClassifier:
                 continue
             self.traitsCount[column][row[column]] += 1
 
-    def add_conditional_likelyhood(self: Self, df: pd.DataFrame, row) -> None:
-        objectClass = row[df.columns[0]] 
+    def add_conditional_likelyhood(self: Self, row) -> None:
+        """
+        Counts the conditional occurrences of trait values for each class.
+        """
+        objectClass = row[self.trainSet.columns[0]] 
         if objectClass not in self.traitsConditionalCount:
             self.traitsConditionalCount[objectClass] = {}
-        for column in df.columns[1:]:
+        for column in self.trainSet.columns[1:]:
             if column not in self.traitsConditionalCount[objectClass]:
-                self.traitsConditionalCount[objectClass][column] = { row[column]:1 }
+                self.traitsConditionalCount[objectClass][column] = { row[column]: 1 }
                 continue
             if row[column] not in self.traitsConditionalCount[objectClass][column]:
                 self.traitsConditionalCount[objectClass][column][row[column]] = 1
@@ -100,6 +126,9 @@ class MultinomialNaiveBayesClassifier:
             self.traitsConditionalCount[objectClass][column][row[column]] += 1
     
     def add_alpha_to_traits(self: Self) -> None:
+        """
+        Applies Laplace smoothing to trait counts to avoid zero probabilities.
+        """
         for traitName in self.traitNames: # Can be done using keys, but it's for clarity
             for trait in self.traits[traitName]:
                 if trait not in self.traitsCount[traitName]:
@@ -108,6 +137,9 @@ class MultinomialNaiveBayesClassifier:
                 self.traitsCount[traitName][trait] += self.alpha
 
     def add_alpha_to_conditional_traits(self: Self) -> None:
+        """
+        Applies Laplace smoothing to conditional trait counts.
+        """
         for className in self.classes:
             for traitName in self.traitNames: # Can be done using keys, but it's for clarity
                 for trait in self.traits[traitName]:
@@ -116,12 +148,11 @@ class MultinomialNaiveBayesClassifier:
                         continue
                     self.traitsConditionalCount[className][traitName][trait] += self.alpha
     
-    def calculate_trait_likelyhoods(self: Self, df: pd.DataFrame) -> None:
+    def calculate_trait_likelyhoods(self: Self) -> None:
         """
         Calculates likelyhoods of all values of all traits
         """
-        for column in df.columns[1:]:
-            # Each column has to have a value in this case, it will throw an error
+        for column in self.trainSet.columns[1:]:
             for key,value in self.traitsCount[column].items():
                 if column not in self.traitsLikelyhood:
                     self.traitsLikelyhood[column] = {}
@@ -133,21 +164,22 @@ class MultinomialNaiveBayesClassifier:
         """
         for key,value in self.classesCount.items():
             self.classesLikelyhood[key] = value/self.dataSize
-            # print(f"{value} / {self.dataSize}")
-
-    def calculate_conditional_likelyhoods(self: Self, df: pd.DataFrame) -> None:
+            
+    def calculate_conditional_likelyhoods(self: Self) -> None:
         for className in self.classes:
             if className not in self.traitsConditionalLikelyhood:
                 self.traitsConditionalLikelyhood[className] = {}
-            for column in df.columns[1:]:
+            for column in self.trainSet.columns[1:]:
                 # Each column has to have a value in this case, it will throw an error
                 for key,value in self.traitsConditionalCount[className][column].items():
                     if column not in self.traitsConditionalLikelyhood[className]:
                         self.traitsConditionalLikelyhood[className][column] = {}
-                    # self.traitsConditionalLikelyhood[className][column][key] = value/(self.classesCount[className]+self.alpha*len(self.traitsConditionalLikelyhood[className][column]))
-                    self.traitsConditionalLikelyhood[className][column][key] = value/(self.dataSize+self.alpha*len(self.traitsConditionalLikelyhood[className][column]))
-
+                    self.traitsConditionalLikelyhood[className][column][key] = value / (self.dataSize+self.alpha*len(self.traitsConditionalLikelyhood[className][column]))
+    
     def read_data(self: Self) -> None:
+        """
+        Reads data from the self.dataPath
+        """
         if not self.dataPath:
             print("First set the data source!")
             return False
@@ -157,71 +189,78 @@ class MultinomialNaiveBayesClassifier:
             print("An error has occured while reading the file (check if the file exists)", file=stderr)
             raise error
         self.df = dataframe
-            
-    def test(self: Self):
-        print("Testing after training")
+
+    def test_accuracy(self: Self, testSet):
+        self.testSet = testSet
+        return self.test_local()
+    
+    def test_local(self: Self):
         correctGuesses = 0
         adjustmentGuesses = 0
-        for rowIndex, test in self.testData.iterrows():
+        for rowIndex, test in self.testSet.iterrows():
             # print(test)
             className, likelyhoodValue = self.predict(test[1:])
             if className == test[0]:
                 correctGuesses += 1
-                adjustmentGuesses += 1 # Didn't need adjustment
+                adjustmentGuesses += 1
             else:
                 predictions = self.predict_proba(test[1:])
-                # print(f"Wrong predictions {predictions} expected {test[0]} but gotten {className}")
                 newPredictions = self.make_mushroom_safe(predictions)
                 newClassName, _ = self.select_most_likely(newPredictions)
                 if newClassName == test[0]:
                     adjustmentGuesses += 1
-        accuracy = correctGuesses/len(self.testData)
-        adjustmentAccuracy = adjustmentGuesses/len(self.testData)
-        # print(f"Accuracy of {accuracy} accuracy after safety adjsutment {adjustmentAccuracy}") 
+        accuracy = correctGuesses / len(self.testSet)
+        adjustmentAccuracy = adjustmentGuesses / len(self.testSet)
         return accuracy
-    def fit(self: Self) -> None:
+    
+    
+    def fit(self: Self, trainSet: pd.DataFrame):
+        self.trainSet = trainSet
+        self.fit_local()
+
+    def set_train_set(self: Self):
+        self.read_data()
+        self.trainSet, self.testSet = train_test_split(self.df, test_size=self.testTrainSplit)
+
+
+    def fit_local(self: Self) -> None:
         """
-        Trains the model based on the given data
-        Arguments:
-        Nothing
-        Returns:
-        True - if the data has been analyzed and trained successfully
-        False - if the training set is not configured properly
-        Raises Error - if an error occured while reading the data
+        Internal method for training the model. Computes counts and likelihoods.
         """
         
         # =============== Read data, set train and test sets ===============
         
-        self.read_data()
-        trainSet, self.testData = train_test_split(self.df, test_size=self.testTrainSplit)
-        self.add_trait_names(trainSet)
-        self.add_traits(self.df)
-        self.dataSize = trainSet.size//len(trainSet.columns)
+        self.add_trait_names()
+        self.add_traits()
+        self.dataSize = self.trainSet.size//len(self.trainSet.columns)
         # Set the class column name (usually 'class')
-        classColumnName = trainSet.columns[0]
+        classColumnName = self.trainSet.columns[0]
         # Count classes and traits
-        for index, row in trainSet.iterrows():
+        for index, row in self.trainSet.iterrows():
             self.add_class_value(row[classColumnName])
-            self.add_trait_values(trainSet,row)
-            self.add_conditional_likelyhood(trainSet,row)
+            self.add_trait_values(row)
+            self.add_conditional_likelyhood(row)
         
         self.add_alpha_to_traits()
         self.add_alpha_to_conditional_traits()
 
         # =============== Calculate likelyhoods ===============
         
-        self.calculate_trait_likelyhoods(trainSet)
+        self.calculate_trait_likelyhoods()
         self.calculate_classes_likelyhoods()
-        self.calculate_conditional_likelyhoods(trainSet)
+        self.calculate_conditional_likelyhoods()
     
     def make_mushroom_safe(self: Self, predictions: dict[str,float]):
         # ONLY FOR MUSHROOM PREDICTOR
-        if 'e' in predictions:
-            if predictions['e'] < 0.2: # Should not be considered safe to eat
-                predictions['e'] = 0
+        # if 'e' in predictions:
+        #     if predictions['e'] < 0.2: # Should not be considered safe to eat
+        #         predictions['e'] = 0
         return predictions
 
     def select_most_likely(self: Self, predictedProbabilities: dict[str,float]) -> tuple[str,float]:
+        """
+        Selects the class with the highest score.
+        """
         maxProb = -float('inf')
         maxClass = None
         for key in predictedProbabilities.keys():
@@ -244,46 +283,66 @@ class MultinomialNaiveBayesClassifier:
         predictedProbabilities = self.predict_proba(dataRow)
         return self.select_most_likely(predictedProbabilities)
   
-    def predict_proba(self: Self,dataRow: tuple[str]) -> dict[str,float]:
+    def predict_proba(self: Self, dataRow: tuple[str]) -> dict[str, float]:
         """
-        Predicts which value is most likely to appear
+        Predicts the probabilities of each class for a given data row.
         Arguments:
-        Nothing
+        - dataRow: A tuple containing the values of the features for a single data instance.
+        
         Returns:
-         - A list of probabilities of classification
+        - A dictionary containing the log scores of each class as keys and their respective 
+          log-probabilities as values.
         """
         classProbabilities = {}
         classScores = {}
-        classPartialProbabilities = { element:[] for element in self.classes }
+        classPartialProbabilities = {element: [] for element in self.classes}
+
+        # Iterate over each class to calculate probabilities and scores.
         for className in self.classes:
             resultProbability = 0
             accumulatedTraits = 1
             summedClassScore = 0
-            for i,trait in enumerate(dataRow):
-                # One-liner to be split up
-                
-                conditionalLikelyhood = self.traitsConditionalLikelyhood[className][self.traitNames[i]][trait] 
-                traitsLikelyhood = self.traitsLikelyhood[self.traitNames[i]][trait]
+
+            # Iterate over each feature (trait) value in the data row.
+            for i, traitValue in enumerate(dataRow):
+                # Check if the trait value exists in the conditional likelihood dictionary for the current class.
+                if traitValue not in self.traitsConditionalLikelyhood[className][self.traitNames[i]]:
+                    # Assign a default value of 1 if the trait value is missing. That will result in log score being 0 - so no change for the score
+                    conditionalLikelyhood = 1
+                    traitsLikelyhood = 1
+                else:
+                    # Retrieve the conditional likelihood and the overall likelihood for the current trait value.
+                    conditionalLikelyhood = self.traitsConditionalLikelyhood[className][self.traitNames[i]][traitValue]
+                    traitsLikelyhood = self.traitsLikelyhood[self.traitNames[i]][traitValue]
+
+                # Update the accumulated product of conditional likelihoods for this class.
                 accumulatedTraits *= conditionalLikelyhood
-                classPartialProbabilities[className].append(f"{self.traitsConditionalLikelyhood[className][self.traitNames[i]][trait]} / {self.traitsLikelyhood[self.traitNames[i]][trait]}")
-                
+
+                # Log the intermediate computation for debugging.
+                classPartialProbabilities[className].append(f"{conditionalLikelyhood} / {conditionalLikelyhood}")
+
+                # Compute the logarithmic contributions for better numerical stability.
                 logarithmicConditionalScore = log(conditionalLikelyhood)
                 logarithmicTraitsScore = log(traitsLikelyhood)
                 summedClassScore += logarithmicConditionalScore - logarithmicTraitsScore
+
+            # Retrieve the prior probability (likelihood) of the class.
             classLikelyhood = self.classesLikelyhood[className]
             logClassScore = log(classLikelyhood)
-            resultProbability = accumulatedTraits*classLikelyhood
+
+            # Combine the accumulated traits and class prior to compute the final probability for this class.
+            resultProbability = accumulatedTraits * classLikelyhood
+
+            # Update the summed class score by adding the log of the class likelihood.
             summedClassScore += logClassScore
-            classProbabilities[className] = resultProbability
-            classScores[className] = summedClassScore # Will be negative
-        printClass = False
+
+            # Store the final probabilities and log scores for the class.
+            classProbabilities[className] = resultProbability # In case it's needed
+            classScores[className] = summedClassScore  # The log score will usually be negative.
+
+        # Check for any anomalies where probabilities exceed 1
         for key in classProbabilities.keys():
             if classProbabilities[key] > 1:
                 self.oddities += 1
-                # print(f"Weird probability... To be verified")
-                # print(classProbabilities)
-                # printClass = True
-        # if printClass:
-        #     for key in classProbabilities.keys():
-        #         print(f"{key}: {classPartialProbabilities[key]}")
+
         return classScores
