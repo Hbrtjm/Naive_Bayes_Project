@@ -4,6 +4,7 @@ from os import path
 from sys import stderr
 from sklearn.model_selection import train_test_split
 from math import log
+from numpy import exp
 
 class MultinomialNaiveBayesClassifier:
 
@@ -166,6 +167,9 @@ class MultinomialNaiveBayesClassifier:
             self.classesLikelyhood[key] = value/self.dataSize
             
     def calculate_conditional_likelyhoods(self: Self) -> None:
+        """
+        Calculates conditional likelyhood for each class given the trait
+        """
         for className in self.classes:
             if className not in self.traitsConditionalLikelyhood:
                 self.traitsConditionalLikelyhood[className] = {}
@@ -195,10 +199,12 @@ class MultinomialNaiveBayesClassifier:
         return self.test_local()
     
     def test_local(self: Self):
+        """
+        Tests the model using the pd.DataFrame specified in self.testSet
+        """
         correctGuesses = 0
         adjustmentGuesses = 0
         for rowIndex, test in self.testSet.iterrows():
-            # print(test)
             className, likelyhoodValue = self.predict(test[1:])
             if className == test[0]:
                 correctGuesses += 1
@@ -340,9 +346,16 @@ class MultinomialNaiveBayesClassifier:
             classProbabilities[className] = resultProbability # In case it's needed
             classScores[className] = summedClassScore  # The log score will usually be negative.
 
+        values = [ classProbabilities[key] for key in classProbabilities.keys() ]
+        sumOfValues = sum(values)
         # Check for any anomalies where probabilities exceed 1
         for key in classProbabilities.keys():
-            if classProbabilities[key] > 1:
-                self.oddities += 1
+            classProbabilities[key] = classProbabilities[key] / sumOfValues 
 
-        return classScores
+        values = [ exp(classScores[key]) for key in classScores.keys() ]
+        sumOfValues = sum(values)        
+        for key in classScores.keys():
+            classScores[key] = exp(classScores[key]) / sumOfValues
+
+
+        return classProbabilities

@@ -15,6 +15,10 @@ class NormalDistribution:
         self.variance = variance
     
     def get_value(self: Self, x: float):
+        """
+        Calculates the probability density function (PDF) value in point x.
+        If mean or variance are None, it raises an error
+        """
         if self.mean is None or self.variance is None:
             raise ValueError("Values not set for Gaussian distribution") 
         if self.variance == 0:
@@ -25,6 +29,9 @@ class NormalDistribution:
             print(e)
             return 0
     def fit_values(self: Self, values: List[float]):
+        """
+        Fits the mean and variance based on the provided list of data points.
+        """
         self.mean = sum(values)/len(values)
         squaredMean = sum([ element ** 2 for element in values ])/len(values)
         self.variance = squaredMean - self.mean ** 2
@@ -40,21 +47,36 @@ class GaussianNaiveBayesClassifier:
         """
         Constructor of the Naive Bayes class
         """
-        self.testSet = None
-        self.dict = {}
-        self.classesLikelyhood = {}
-        self.classesCount = {}
-        self.df = None
-        self.testTrainSplit = 0.7
-        self.dataSize = None
-        self.classes = set()
-        self.conditionalTraitsList = {}
-        self.conditionalProbabilities = {} # 'trait':function
-        self.traitNames = []
-        self.alpha = 1
-        self.current_dir = path.dirname(__file__)
-        self.dataPath = self.current_dir
-        self.oddities = 0
+        # Stores the test dataset used for evaluating the model.
+        self.testSet = None  
+        # General-purpose dictionary, possibly used for internal mappings or configurations.
+        self.dict = {}  
+        # Stores the likelihood of each class for classification.
+        self.classesLikelyhood = {}  
+        # Keeps track of the count of each class in the training dataset.
+        self.classesCount = {}  
+        # Stores the main dataset as a DataFrame.
+        self.df = None  
+        # Fraction of the data to be used for training; the rest is for testing.
+        self.testTrainSplit = 0.7  
+        # Stores the size of the dataset (number of rows or total entries).
+        self.dataSize = None  
+        # A set of all unique class labels in the dataset.
+        self.classes = set()  
+        # Stores traits grouped by class, with trait values organized per class.
+        self.conditionalTraitsList = {}  
+        # Maps traits to their Gaussian distribution function for each class.
+        self.conditionalProbabilities = {}  # 'trait': function
+        # A list of names of all traits (features/columns) in the dataset.
+        self.traitNames = []  
+        # Smoothing parameter for probability calculations (e.g., Laplace smoothing).
+        self.alpha = 1  
+        # Stores the current directory of the script file.
+        self.current_dir = path.dirname(__file__)  
+        # Path to the dataset; defaults to the current directory.
+        self.dataPath = self.current_dir  
+        # Tracks anomalies or unusual cases encountered during processing.
+        self.oddities = 0  
 
     def set_split_ratio(self: Self, ratio: float):
         self.testTrainSplit = ratio
@@ -245,8 +267,16 @@ class GaussianNaiveBayesClassifier:
             summedClassScore += logClassScore
             classProbabilities[className] = resultProbability
             classScores[className] = summedClassScore # Will be negative
-        printClass = False
+        
+        values = [ classProbabilities[key] for key in classProbabilities.keys() ]
+        sumOfValues = sum(values)
+        # Check for any anomalies where probabilities exceed 1
         for key in classProbabilities.keys():
-            if classProbabilities[key] > 1:
-                self.oddities += 1
-        return classScores
+            classProbabilities[key] = classProbabilities[key] / sumOfValues 
+        
+        values = [ exp(classScores[key]) for key in classScores.keys() ]
+        sumOfValues = sum(values)        
+        for key in classScores.keys():
+            classScores[key] = exp(classScores[key]) / sumOfValues
+
+        return classProbabilities
